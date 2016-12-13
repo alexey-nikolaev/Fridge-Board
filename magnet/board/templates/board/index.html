@@ -1,0 +1,469 @@
+{% load board_extras %}
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    <title>Fridge Board</title>
+    <style type="text/css">
+        .word {font-size: x-large; border: thin solid black;
+            width: 5em; text-align: center; padding:10px;
+            background: #4CAF50;
+            font-family: "Tahoma", sans-serif;
+            color: #FFFFFF;
+            border-color: #008a77;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale}
+        .active_word {font-size: x-large; border: thin solid black;
+            width: 5em; text-align: center; padding:10px;
+            background: #9370DB;
+            font-family: "Tahoma", sans-serif;
+            color: #FFFFFF;
+            border-color: #008a77;
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale}
+
+        #logo {
+          font-family: "Tahoma", sans-serif;
+          border: 5px dotted #000;
+          text-decoration: none;
+          background: #1E90FF;
+          width: 85%;
+          padding: 15px;
+          top: 0px;
+          left: 0px;
+          color: #000000;
+          font-size: xx-large;
+          position: fixed;
+          z-index:1000000;
+        }
+        #rules {
+          font-family: "Tahoma", sans-serif;
+          width: 85%;
+          padding: 5px;
+          top: 0px;
+          left: 300px;
+          color: #000000;
+          font-size: large;
+          position: fixed;
+          z-index:1000001;
+        }
+        #logout button {
+          font-family: "Tahoma", sans-serif;
+          border: 2px dotted #000;
+          text-decoration: none;
+          background: #1E90FF;
+          width: 100px;
+          padding: 5px;
+	  top: 20px;
+          right: 0px;
+          color: #000000;
+          font-size: large;
+          -webkit-transition: all 0.3 ease;
+          transition: all 0.3 ease;
+          cursor: pointer;
+	  position: fixed;
+          z-index:1000002;
+        }
+        .tooltip:hover span {
+          font-family: Tahoma, sans-serif;
+          font-size: large;
+          position: absolute;
+          left: 1em;
+          top: 2em;
+          z-index: 99;
+          margin-left: 0;
+          width: 300px;
+        }
+        .tooltip:hover img {
+          border: 0;
+          margin: -10px 0 0 -55px;
+          float: left;
+          position: absolute;
+        }
+        .tooltip:hover em {
+          font-family: Tahoma, sans-serif;
+          font-size: 1.2em;
+          font-weight: bold;
+          display: block;
+          padding: 0.2em 0 0.6em 0;
+        }
+        .classic { padding: 0.8em 1em; }
+        .custom { padding: 0.5em 0.8em 0.8em 2em; }
+        <strong>* html</strong> a:hover { background: transparent; }
+
+        .tooltip {
+          border-bottom: 1px dotted #000000;
+          color: #000000; outline: none;
+          cursor: help; text-decoration: none;
+          position: relative;
+        }
+        .tooltip span {
+          margin-left: -999em;
+          position: absolute;
+        }
+
+        .classic { background: #FFFFAA; border: 1px solid #FFAD33; text-transform: lowercase;}
+        .critical { background: #FFCCAA; border: 1px solid #FF3334; }
+        .help { background: #9FDAEE; border: 1px solid #2BB0D7; }
+        .info { background: #9FDAEE; border: 1px solid #2BB0D7; }
+        .warning { background: #FFFFAA; border: 1px solid #FFAD33; }
+
+	#big-ghost{
+	  background-color:rgba(239, 28, 190, 0.6);
+	  border:1px solid #b20e8c;
+	  position:absolute;
+	}
+
+	.ghost-active {
+	  display: block !important;
+	}
+
+	.ghost-select > span {
+	  background-color: rgba(239, 28, 190, 0.6);
+	  border: 1px solid #b20e8c;
+	  width: 100%;
+	  height: 100%;
+	  float: left;
+	}
+
+	#grid {
+	  width: 100%;
+	  height: 100%;
+	  position: absolute;
+	}
+
+	.ghost-select {
+	  display: none;
+	  z-index: 9000;
+	  position: absolute !important;
+	  cursor: default !important;
+	}
+        {% for word in wordlist %}
+        #word_{{ word.id }} {position: absolute;
+            left: {{ word.pos_x }}px; top: {{ word.pos_y }}px;
+            {% if word.used %}
+            background: {{ phrasedict|get_item:word.phrase }};
+            border-color: #4682B4;
+            {% endif %}}
+        {% endfor %}
+    </style>
+    {% load static %}
+    <script src="{% static "jquery-1.8.3.min.js" %}"></script>
+    <script src="{% static "ui/jquery.ui.core.js" %}"></script>
+    <script src="{% static "ui/jquery.ui.widget.js" %}"></script>
+    <script src="{% static "ui/jquery.ui.mouse.js" %}"></script>
+    <script src="{% static "ui/jquery.ui.draggable.js" %}"></script>
+    <script src="{% static "jquery-collision.min.js" %}"></script>
+    <script src="{% static "jquery-ui-draggable-collision.min.js" %}"></script>
+    <script type="text/javascript">
+        window.onload = function() {
+            window.scrollTo( {{ init_scroll_x }}, {{ init_scroll_y }} );
+        };
+
+    function getBodyScrollTop() {  
+         return self.pageYOffset || (document.documentElement && document.documentElement.scrollTop) || (document.body && document.body.scrollTop);  
+    };  
+
+    function getBodyScrollLeft() {  
+        return self.pageXOffset || (document.documentElement && document.documentElement.scrollLeft) || (document.body && document.body.scrollLeft);  
+    };
+
+     var pos_x = 0;
+     var pos_y = 0;
+     var selected_words = [];
+
+        function getOffset(id) {
+          el = document.getElementById(id)
+          el = el.getBoundingClientRect();
+          return {
+              left: el.left + getBodyScrollLeft(),
+              top: el.top + getBodyScrollTop()
+          }
+        };
+
+        $(function() {
+            $('.word').draggable({
+                    snap: ".word",
+                    obstacle: ".word",
+                    preventCollision: true,
+                    start: function(event, ui) {
+        			$(this).removeClass('word')
+                       $(this).addClass('active_word');
+        	        },
+        	        stop: function(event, ui) {
+                        $(this).removeClass('active_word')
+                        $(this).addClass('word')
+                        id = event.target.id
+                        offset = getOffset(id)
+                        $('#word_id').val(id.slice(5))
+                        $('#pos_x').val(offset.left)
+                        $('#pos_y').val(offset.top)
+                        $('#scroll_x').val(getBodyScrollLeft())
+                        $('#scroll_y').val(getBodyScrollTop())
+                        document.forms["repos_form"].submit()
+		         }
+            });
+        });
+
+	$(document).ready(function(){
+          $('#grid').height($(document).height());
+          $('#grid').width($(document).width());
+          $('#logo').width($(document).width());
+	});
+
+	document.addEventListener("keydown", function(e) {
+	    if(e.keyCode === 13) {
+		var index;
+		var phrase = "";
+		for (index = 0; index < selected_words.length; ++index) {
+    		   phrase += (" " + selected_words[index]);
+		}
+	     $('#phrase').val(phrase)
+           $('#mode').val("add")
+           $('#scroll_x_2').val(getBodyScrollLeft())
+                $('#scroll_y_2').val(getBodyScrollTop())
+		selected = document.getElementsByClassName("selected")
+		for (index = 0; index < selected.length; ++index) {
+		   $(selected[index]).removeClass('selected');
+		}
+		document.forms["phrase_form"].submit()
+	    }
+        else if(e.keyCode === 46) {
+           var index;
+		var phrase = "";
+		for (index = 0; index < selected_words.length; ++index) {
+    		   phrase += (" " + selected_words[index]);
+		}
+		$('#phrase').val(phrase)
+           $('#mode').val("del")
+		$('#scroll_x_2').val(getBodyScrollLeft())
+                $('#scroll_y_2').val(getBodyScrollTop())
+		selected = document.getElementsByClassName("selected")
+		for (index = 0; index < selected.length; ++index) {
+		   $(selected[index]).removeClass('selected');
+		}
+		document.forms["phrase_form"].submit()
+          }
+	});
+
+
+	$(document).ready(function(){
+  
+	  $("#grid").mousedown(function (e) {
+	       
+		$("#big-ghost").remove();
+		$(".ghost-select").addClass("ghost-active");
+		$(".ghost-select").css({
+		    'left': e.pageX,
+		    'top': e.pageY
+		});
+
+		initialW = e.pageX;
+		initialH = e.pageY;
+
+		$(document).bind("mouseup", selectElements);
+		$(document).bind("mousemove", openSelector);
+
+	    });
+	  
+	  
+	});
+
+	function selectElements(e) {
+	    $("#score>span").text('0');
+	    $(document).unbind("mousemove", openSelector);
+	    $(document).unbind("mouseup", selectElements);
+	    var maxX = 0;
+	    var minX = 5000;
+	    var maxY = 0;
+	    var minY = 5000;
+	    var totalElements = 0;
+	    var elementArr = new Array();
+
+          selected = document.getElementsByClassName("selected")
+          for (index = 0; index < selected.length; ++index) {
+		   $(selected[index]).removeClass('selected');
+		}
+
+          selected_words = [];
+
+	    $(".word").each(function () {
+		var aElem = $(".ghost-select");
+		var bElem = $(this);
+		var result = doObjectsCollide(aElem, bElem);
+
+		console.log(result);
+		if (result == true) {
+		  bElem.addClass('selected');
+              var el_id = bElem.attr('id');
+		  selected_words.push(el_id.substr(5, el_id.length-5));
+		  $("#score>span").text( Number($("#score>span").text())+1 );
+		  var aElemPos = bElem.offset();
+		        var bElemPos = bElem.offset();
+		        var aW = bElem.width();
+		        var aH = bElem.height();
+		        var bW = bElem.width();
+		        var bH = bElem.height();
+
+		        var coords = checkMaxMinPos(aElemPos, bElemPos, aW, aH, bW, bH, maxX, minX, maxY, minY);
+		        maxX = coords.maxX;
+		        minX = coords.minX;
+		        maxY = coords.maxY;
+		        minY = coords.minY;
+		        var parent = bElem.parent();
+
+		        //console.log(aElem, bElem,maxX, minX, maxY,minY);
+		        if (bElem.css("left") === "auto" && bElem.css("top") === "auto") {
+		            bElem.css({
+		                'left': parent.css('left'),
+		                'top': parent.css('top')
+		            });
+		        }
+		  $("body").append("<div id='big-ghost' class='big-ghost' x='" + Number(minX - 20) + "' y='" + Number(minY - 10) + "'></div>");
+
+		    $("#big-ghost").css({
+		        'width': maxX - minX + 20,
+		        'height': maxY - minY + 20,
+		        'top': minY,
+		        'left': minX
+		    });
+		  
+		  
+		}
+	    });
+	    
+	    $(".ghost-select").removeClass("ghost-active");
+	    $(".ghost-select").width(0).height(0);
+
+	    ////////////////////////////////////////////////
+
+	}
+
+	function openSelector(e) {
+	    var w = Math.abs(initialW - e.pageX);
+	    var h = Math.abs(initialH - e.pageY);
+
+	    $(".ghost-select").css({
+		'width': w,
+		'height': h
+	    });
+	    if (e.pageX <= initialW && e.pageY >= initialH) {
+		$(".ghost-select").css({
+		    'left': e.pageX
+		});
+	    } else if (e.pageY <= initialH && e.pageX >= initialW) {
+		$(".ghost-select").css({
+		    'top': e.pageY
+		});
+	    } else if (e.pageY < initialH && e.pageX < initialW) {
+		$(".ghost-select").css({
+		    'left': e.pageX,
+		    "top": e.pageY
+		});
+	    }
+	}
+	  
+	  
+	function doObjectsCollide(a, b) { // a and b are your objects
+	    //console.log(a.offset().top,a.position().top, b.position().top, a.width(),a.height(), b.width(),b.height());
+	    var aTop = a.offset().top;
+	    var aLeft = a.offset().left;
+	    var bTop = b.offset().top;
+	    var bLeft = b.offset().left;
+
+	    return !(
+		((aTop + a.height()) < (bTop)) ||
+		(aTop > (bTop + b.height())) ||
+		((aLeft + a.width()) < bLeft) ||
+		(aLeft > (bLeft + b.width()))
+	    );
+	}  
+
+	function checkMaxMinPos(a, b, aW, aH, bW, bH, maxX, minX, maxY, minY) {
+	    'use strict';
+
+	    if (a.left < b.left) {
+		if (a.left < minX) {
+		    minX = a.left;
+		}
+	    } else {
+		if (b.left < minX) {
+		    minX = b.left;
+		}
+	    }
+
+	    if (a.left + aW > b.left + bW) {
+		if (a.left > maxX) {
+		    maxX = a.left + aW;
+		}
+	    } else {
+		if (b.left + bW > maxX) {
+		    maxX = b.left + bW;
+		}
+	    }
+	    ////////////////////////////////
+	    if (a.top < b.top) {
+		if (a.top < minY) {
+		    minY = a.top;
+		}
+	    } else {
+		if (b.top < minY) {
+		    minY = b.top;
+		}
+	    }
+
+	    if (a.top + aH > b.top + bH) {
+		if (a.top > maxY) {
+		    maxY = a.top + aH;
+		}
+	    } else {
+		if (b.top + bH > maxY) {
+		    maxY = b.top + bH;
+		}
+	    }
+
+	    return {
+		'maxX': maxX,
+		'minX': minX,
+		'maxY': maxY,
+		'minY': minY
+	    };
+	}
+    </script> 
+  </head>
+  <body bgcolor='#f2f2f2'>
+      <div id="caption">
+        <div id="logo">fridge board</div>
+	<div id="rules">place matching words close to each other to make poetry<br>click and drag to draw rectangle and select word group<br>press 'enter' key to create a phrase and 'delete' to free up selected words</div> 
+	<div id="logout">
+		<form class="logout-form" id="logout-form" action="{% url 'board:logout' %}" 			method="post">{% csrf_token %}<button>logout</button></form>
+	</div>
+	<div id="grid">
+	  <div class="ghost-select"><span></span></div>
+	</div>
+    {% for word in wordlist %}
+        <div class="word" id="word_{{ word.id }}">
+        {% if word.used %}
+            <a class="tooltip" href="#">{{ word.text }}<span class="classic">{{ word.phrase.text }}<br><br>created by: {{ word.phrase.created_by }}<br>date: {{ word.phrase.pub_date }}</span></a>
+        {% else %}
+            {{ word.text }}
+        {% endif %}
+        </div>
+    {% endfor %}
+    <form id="repos_form" action="{% url 'board:reposition' %}" method="post">
+	{% csrf_token %}
+        <input type="hidden" id="word_id" name="word_id"/>
+        <input type="hidden" id="pos_x" name="pos_x"/>
+        <input type="hidden" id="pos_y" name="pos_y"/>
+        <input type="hidden" id="scroll_x" name="scroll_x"/>
+        <input type="hidden" id="scroll_y" name="scroll_y"/>
+    </form>
+    <form id="phrase_form" action="{% url 'board:add_or_del_phrase' %}" method="post">
+	{% csrf_token %}
+        <input type="hidden" id="mode" name="mode"/>
+        <input type="hidden" id="phrase" name="phrase"/>
+        <input type="hidden" id="scroll_x_2" name="scroll_x_2"/>
+        <input type="hidden" id="scroll_y_2" name="scroll_y_2"/>
+    </form>
+  </body>
+</html>
